@@ -87,7 +87,7 @@
 <body>
 <header class="hero">
   <div class="wrap">
-    <span class="badge">📓 옵시디언 플러그인 · PC · 맥 · 폰</span>
+    <span class="badge">📓 옵시디언에 붙여 쓰는 일기 기능 · PC · 맥 · 폰</span>
     <h1>Steady 일기</h1>
     <p class="lead">말하듯 대화하면, 따뜻하게 정리된 일기가 남아요.<br>질문을 따라 이야기하다 보면 오늘의 감정과 배움이 저절로 연결돼요.</p>
     <div class="cta-row">
@@ -96,13 +96,26 @@
     </div>
     <p class="meta">버전 0.1.0 · 약 15KB · 무료 (AI 대화 비용은 내 OpenRouter 키로 일기 한 번에 대략 100~200원)</p>
     <nav class="toc">
-      <a href="#features">할 수 있는 것</a><a href="#demo">이렇게 저장돼요</a><a href="#use">활용법</a>
+      <a href="#first">처음이라면</a><a href="#features">할 수 있는 것</a><a href="#demo">이렇게 저장돼요</a><a href="#use">활용법</a>
       <a href="#install">설치</a><a href="#custom">내게 맞게 바꾸기</a><a href="#notes">알아 둘 점</a>
     </nav>
   </div>
 </header>
 
 <main class="wrap">
+  <section id="first">
+    <h2>처음이라면 읽어 주세요 🙂</h2>
+    <p class="sub">"플러그인"이라는 말이 낯설어도 괜찮아요. 휴대폰에 앱 하나 까는 것과 비슷해요.</p>
+    <div class="grid">
+      <div class="card"><div class="icon">📓</div><h3>옵시디언이 뭐예요?</h3><p>내 컴퓨터에 메모·일기를 저장하는 무료 노트 앱이에요. 글이 내 컴퓨터 안의 파일로 남아서, 회사가 사라져도 내 기록은 그대로예요. <a href="https://obsidian.md" target="_blank" rel="noopener">obsidian.md</a>에서 받을 수 있어요.</p></div>
+      <div class="card"><div class="icon">🧩</div><h3>플러그인이 뭐예요?</h3><p>옵시디언에 기능을 하나 더 붙이는 <b>작은 추가 기능</b>이에요. 브라우저의 확장 프로그램이나 휴대폰 앱처럼, 넣으면 생기고 빼면 사라져요. Steady 일기는 "대화하면서 일기 쓰기" 기능을 붙여요.</p></div>
+      <div class="card"><div class="icon">⚠️</div><h3>켤 때 뜨는 경고창은요?</h3><p>커뮤니티 플러그인을 처음 켜면 옵시디언이 "직접 확인한 플러그인만 켜세요"라는 경고를 띄워요. 이 플러그인만이 아니라 <b>모든 외부 플러그인에 똑같이 뜨는 안내</b>예요.</p></div>
+      <div class="card"><div class="icon">🔒</div><h3>안전한가요?</h3><p>이 플러그인이 하는 일은 딱 세 가지예요. ① 내 일기 파일 읽기·쓰기 ② 대화 내용을 AI에 보내 답 받기 ③ 감정·사람 페이지 만들기. 다른 파일을 지우거나 어딘가로 몰래 보내지 않아요. 코드도 zip 안의 <code>main.js</code>에 그대로 들어 있어서 누구나 열어 볼 수 있어요.</p></div>
+      <div class="card"><div class="icon">↩️</div><h3>마음에 안 들면요?</h3><p>설정 → 커뮤니티 플러그인에서 <b>끄면</b> 바로 멈추고, <code>steady-diary</code> 폴더를 지우면 깔끔하게 사라져요. 이미 써 둔 일기는 그대로 남아요.</p></div>
+      <div class="card"><div class="icon">🙋</div><h3>어려우면요?</h3><p>설치는 폴더 하나 복사하고 스위치 두 번 켜는 게 전부예요. 그래도 막히면 이 페이지를 알려준 친구에게 화면을 보여 주세요.</p></div>
+    </div>
+  </section>
+
   <section id="features">
     <h2>무엇을 할 수 있나요?</h2>
     <p class="sub">빈 화면 앞에서 뭘 써야 할지 막막할 때, 대화가 일기를 대신 꺼내 줘요.</p>
@@ -171,7 +184,8 @@
       <li><a href="steady-diary-plugin.zip" download>플러그인 zip</a>을 받아 압축을 풀어요. 안에 <code>steady-diary</code> 폴더, 설치 안내, 상담 노트 템플릿이 들어 있어요.</li>
       <li><code>steady-diary</code> 폴더를 내 보관함의 <code>.obsidian/plugins/</code> 안에 복사해요.<br>
         <small><code>.obsidian</code>은 숨김 폴더예요. 윈도우: 파일 탐색기 → 보기 → <b>숨긴 항목</b> 체크 · 맥: Finder에서 <kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>.</kbd> · <code>plugins</code> 폴더가 없으면 새로 만들어요.</small></li>
-      <li>옵시디언 → <b>설정 → 커뮤니티 플러그인 → 커뮤니티 플러그인 켜기</b>(제한 모드 끄기).</li>
+      <li>옵시디언 → <b>설정 → 커뮤니티 플러그인 → 커뮤니티 플러그인 켜기</b>(제한 모드 끄기).<br>
+        <small>이때 경고창이 떠도 놀라지 마세요. 모든 외부 플러그인에 뜨는 안내예요(<a href="#first">위 설명</a> 참고).</small></li>
       <li>설치된 플러그인 목록에서 <b>Steady 일기</b>를 켜요. (안 보이면 새로고침 ↻)</li>
       <li>Steady 일기 옆 <b>⚙️</b> → <b>OpenRouter API 키</b>를 붙여넣어요.</li>
       <li>왼쪽 세로 막대의 <b>📓 공책·펜 아이콘</b>을 누르면 오른쪽에 일기 대화가 열려요. <kbd>Enter</kbd> 보내기, <kbd>Shift</kbd>+<kbd>Enter</kbd> 줄바꿈.</li>
