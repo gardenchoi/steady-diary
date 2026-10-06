@@ -97,7 +97,7 @@
     <p class="meta">버전 0.1.0 · 약 15KB · 무료 (AI 대화 비용은 내 OpenRouter 키로 일기 한 번에 대략 100~200원)</p>
     <nav class="toc">
       <a href="#first">처음이라면</a><a href="#features">할 수 있는 것</a><a href="#demo">이렇게 저장돼요</a><a href="#use">활용법</a>
-      <a href="#install">설치</a><a href="#custom">내게 맞게 바꾸기</a><a href="#notes">알아 둘 점</a>
+      <a href="#install">설치</a><a href="#custom">내게 맞게 바꾸기</a><a href="#build">직접 만들기</a><a href="#notes">알아 둘 점</a>
     </nav>
   </div>
 </header>
@@ -239,6 +239,93 @@ SORT length(file.inlinks) DESC
     </div>
   </section>
 
+  <section id="build">
+    <h2>직접 만들고 싶다면 🛠️</h2>
+    <p class="sub">Claude로 이것저것 만들어 본 분이라면, 받아 쓰기보다 직접 만들어 보는 게 더 재밌을 거예요. 구조와 프롬프트를 그대로 공개해요.</p>
+
+    <div class="card" style="margin-bottom:14px">
+      <h3>📂 플러그인 구성</h3>
+      <p>빌드 과정 없이 바로 돌아가는 순수 JavaScript예요. 파일은 딱 3개.</p>
+      <pre><code>steady-diary/
+├─ manifest.json   플러그인 이름·버전·설명 (옵시디언이 읽는 신분증)
+├─ main.js         모든 기능 (약 670줄, 한국어 주석)
+└─ styles.css      채팅 말풍선·미리보기 창 모양</code></pre>
+      <p>👉 코드 바로 보기:
+        <a href="plugin/main.js" target="_blank" rel="noopener">main.js</a> ·
+        <a href="plugin/manifest.json" target="_blank" rel="noopener">manifest.json</a> ·
+        <a href="plugin/styles.css" target="_blank" rel="noopener">styles.css</a> ·
+        <a href="https://github.com/gardenchoi/steady-diary/tree/main/plugin" target="_blank" rel="noopener">GitHub에서 보기</a></p>
+    </div>
+
+    <div class="grid" style="margin-bottom:14px">
+      <div class="card"><h3>🧱 main.js 안의 부품</h3><p>
+        <code>callAI</code> OpenRouter로 AI 호출 (모바일에서도 되는 옵시디언 <code>requestUrl</code>)<br>
+        <code>DiaryStore</code> 보관함 읽기·쓰기: 일일 노트 위치, 지난 일기, 감정·사람 페이지 찾기·만들기, 저장<br>
+        <code>systemPrompt</code> 대화할 때 규칙 (질문 순서, 상담 방식, 지난 일기·상담 노트)<br>
+        <code>wrapPrompt</code> + <code>WRAP_SCHEMA</code> 일기로 정리하는 규칙과 JSON 형식<br>
+        <code>ChatView</code> 오른쪽 채팅 패널 · <code>PreviewModal</code> 저장 전 미리보기 · <code>SettingsTab</code> 설정 화면</p></div>
+      <div class="card"><h3>🔄 흐름</h3><p>
+        ① 패널을 열면 지난 일기 7편 + 이번 주 목표 + 상담 노트를 읽어 대화 규칙에 넣어요<br>
+        ② 대화: 매번 전체 대화를 AI에 보내 다음 질문을 받아요<br>
+        ③ [마치고 정리] → AI가 정해진 JSON(제목 후보, 요약, 감정·고민·사람·장소·배움, 레슨런)으로 정리<br>
+        ④ 미리보기에서 고치고 저장 → 일기 노트에 요약 + Q/A 원문, 속성(tags·감정), 연결된 페이지 "기억"에 한 줄씩</p></div>
+    </div>
+
+    <details open>
+      <summary>📋 프롬프트 ①: Claude에게 처음부터 만들어 달라고 하기</summary>
+      <p>Claude Code(또는 코드를 다룰 수 있는 Claude)에 그대로 붙여넣으세요. 자기 취향에 맞게 문장을 고쳐서 써도 좋아요.</p>
+      <div style="text-align:right;margin:8px 0"><button class="btn ghost copy" data-target="prompt-build" style="padding:6px 16px;font-size:.9rem">복사</button></div>
+      <pre id="prompt-build"><code>옵시디언 플러그인을 하나 만들어 줘. 이름은 "대화 일기"야. 나는 코드를 잘 몰라서, 단계마다 쉽게 설명해 주고 큰 결정은 먼저 물어봐 줘.
+
+## 하는 일
+옵시디언 오른쪽 패널에서 AI "일기 친구"와 대화하면, 질문을 따라 이야기하다가 마지막에 일기로 정리해서 저장해 주는 플러그인.
+
+## 기술
+- 빌드 없이 바로 쓰는 순수 JavaScript (main.js, manifest.json, styles.css 3개). 모바일 옵시디언에서도 동작하게 (isDesktopOnly: false).
+- AI 호출은 옵시디언의 requestUrl로 OpenRouter API(https://openrouter.ai/api/v1/chat/completions). 모델은 설정에서 고르기 (기본 anthropic/claude-sonnet-5, 저렴한 선택지 anthropic/claude-haiku-4.5).
+- API 키는 플러그인 설정 화면에서 입력, 플러그인 data에 저장.
+
+## 대화 (오른쪽 패널)
+- 메신저처럼 말풍선. 입력칸은 Enter로 보내기, Shift+Enter 줄바꿈. 한글 조합 중(isComposing)에는 보내지 않기.
+- 상단에 [새 대화], [마치고 정리] 버튼. 둘 다 누르면 확인 창.
+- 일기 친구 규칙: 해요체, 따뜻하게, 한 번에 질문 하나. 장면 → 감정 → 몸의 느낌 → 생각 → 의미 순으로 끌어내기.
+  좋은 일도 왜 좋았는지 묻기. 평소엔 듣고 공감하되, 내가 해결책을 원하면 근거 있는 방법(인지행동치료, 행동 활성화, 수면·회복 등)을 작은 행동 1~3개로 제안.
+  대화가 무르익으면 오늘 하루의 제목을 같이 정하자고 묻기. 위기 신호엔 자살예방상담전화 109, 정신건강위기상담 1577-0199 안내.
+- 대화 시작할 때 최근 일기 7편(요약 부분만)을 읽어서 "지난주에도 ~했는데"처럼 이어 주기.
+- 보관함의 "Steady/상담 노트.md"가 있으면 읽어서 조언할 때 우선 참고.
+
+## 정리와 저장
+- [마치고 정리]를 누르면 AI가 JSON(구조화 출력)으로 정리: title, title_options(3개), body(짧고 따뜻한 1인칭 요약, 감정은 말한 그대로),
+  summary(한 줄), emotions, topics(고민), people, places, learnings(배운 것), lessons(레슨런).
+- 저장 전 미리보기 창: 제목 후보 버튼, 본문 직접 수정 가능, [저장]/[취소].
+- 일기 파일 위치·이름은 옵시디언 "일일 노트" 설정(.obsidian/daily-notes.json의 folder, format)을 따르기. 예: 일기/YYYY/MM/YYYY-MM-DD.md
+- 노트 형식: "## 📝 제목 (시각)" → 요약 → **레슨런** 목록 → 구분선(---) → **Q.**(AI) / **A.**(나) 대화 원문.
+  같은 날 다시 쓰면 아래에 덧붙이기. 속성(frontmatter)에 tags(일기, 레슨런 있으면 레슨런)와 감정 목록 넣기.
+- 감정·고민·사람·장소·배움은 각각 폴더(감정/ 고민/ 사람/ 장소/ 배움/)에 페이지 하나씩. 본문에 처음 나올 때 [[이름]] 링크.
+  페이지가 없으면 만들고, 맨 아래 "기억"에 "- [[날짜]] 한 줄 요약"을 덧붙이기. 이미 있는 이름·별명(aliases)은 그대로 다시 쓰기.
+- 태그는 정해진 종류만 쓰고 새로 만들지 않기. 구체적인 것은 모두 링크로.
+
+## 마지막에
+설치 방법(보관함/.obsidian/plugins/에 폴더 복사 → 커뮤니티 플러그인 켜기 → API 키 입력)을 쉽게 알려 줘.</code></pre>
+    </details>
+
+    <details>
+      <summary>📋 프롬프트 ②: 받은 플러그인을 내 스타일로 고치기</summary>
+      <p>zip의 <code>main.js</code>를 첨부하거나 <code>steady-diary</code> 폴더를 연 채로 Claude에게 주세요.</p>
+      <div style="text-align:right;margin:8px 0"><button class="btn ghost copy" data-target="prompt-custom" style="padding:6px 16px;font-size:.9rem">복사</button></div>
+      <pre id="prompt-custom"><code>첨부한 main.js는 옵시디언 일기 플러그인 "Steady 일기"야. 빌드 없이 쓰는 순수 JavaScript라서 문법은 ES2017까지만 써 줘.
+대화 규칙은 systemPrompt 함수, 일기 정리 규칙은 wrapPrompt 함수와 WRAP_SCHEMA에 한국어로 적혀 있어.
+
+나는 이렇게 바꾸고 싶어:
+- (예) 질문은 더 짧고 가볍게, 반말로
+- (예) 정리할 때 "오늘 감사한 일 3가지"를 꼭 넣기
+- (예) 감정 페이지 말고 "운동" 페이지에도 기록이 쌓이게
+
+바꾼 부분이 어디인지 쉽게 설명해 주고, 고친 main.js 전체를 줘.
+적용은 보관함/.obsidian/plugins/steady-diary/main.js를 덮어쓰고 옵시디언에서 플러그인을 껐다 켜면 돼.</code></pre>
+    </details>
+  </section>
+
   <section id="notes">
     <h2>알아 둘 점</h2>
     <div class="grid">
@@ -254,5 +341,23 @@ SORT length(file.inlinks) DESC
 <footer>
   <div class="wrap">Steady 일기 0.1.0 · 대화하면서 쓰는 옵시디언 일기 · <a href="steady-diary-plugin.zip" download>다시 받기</a></div>
 </footer>
+<script>
+  document.querySelectorAll('button.copy').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var text = document.getElementById(btn.dataset.target).innerText;
+      var done = function () { btn.textContent = '복사했어요 ✓'; setTimeout(function () { btn.textContent = '복사'; }, 1800); };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, function () { fallback(text); done(); });
+      } else { fallback(text); done(); }
+    });
+  });
+  function fallback(text) {
+    var t = document.createElement('textarea');
+    t.value = text; t.style.position = 'fixed'; t.style.opacity = '0';
+    document.body.appendChild(t); t.select();
+    try { document.execCommand('copy'); } catch (e) {}
+    document.body.removeChild(t);
+  }
+</script>
 </body>
 </html>
