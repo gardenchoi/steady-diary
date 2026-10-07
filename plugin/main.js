@@ -7,13 +7,18 @@
  */
 
 const obsidian = require('obsidian');
-const { Plugin, ItemView, PluginSettingTab, Setting, Modal, Notice, requestUrl, normalizePath, moment } = obsidian;
+const { Plugin, ItemView, PluginSettingTab, Setting, Modal, Notice, requestUrl, normalizePath, moment, Platform } = obsidian;
 
 const VIEW_TYPE = 'steady-diary-chat';
 const ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
 const FIRST_MESSAGE = '오늘 하루는 어땠어요? 떠오르는 장면부터 편하게 얘기해 주세요.';
 
 const DEFAULT_SETTINGS = {
+  // 'claude-code': PC에 설치한 Claude Code로 (Claude 구독 사용, PC 전용)
+  // 'openrouter': OpenRouter API 키로 (폰에서는 항상 이쪽)
+  provider: 'openrouter',
+  claudePath: '',
+  claudeModel: 'sonnet',
   apiKey: '',
   model: 'anthropic/claude-sonnet-5',
   emotionFolder: '감정',
@@ -23,6 +28,7 @@ const DEFAULT_SETTINGS = {
   learningFolder: '배움',
   focusFile: 'Steady/이번 주.md',
   counselFile: 'Steady/상담 노트.md',
+  avatarPath: '',
   pastEntries: 7,
 };
 
@@ -83,8 +89,115 @@ function errorMessage(status) {
   return 'AI 응답 오류예요 (' + status + ').';
 }
 
+const CLAUDE_MODELS = {
+  sonnet: 'Sonnet (추천)',
+  opus: 'Opus (가장 깊이, 구독 사용량을 더 써요)',
+  haiku: 'Haiku (가장 빠르게)',
+};
+
+/** 이번 기기에서 Claude Code를 쓸지 (폰에서는 쓸 수 없어요) */
+function usesClaudeCode(settings) {
+  return settings.provider === 'claude-code' && !Platform.isMobile;
+}
+
+function claudeExecutable(settings) {
+  if (settings.claudePath) return settings.claudePath;
+  const path = require('path');
+  const os = require('os');
+  const fs = require('fs');
+  const name = process.platform === 'win32' ? 'claude.exe' : 'claude';
+  const candidates = [path.join(os.homedir(), '.local', 'bin', name), '/opt/homebrew/bin/claude', '/usr/local/bin/claude'];
+  for (const c of candidates) {
+    if (fs.existsSync(c)) return c;
+  }
+  return 'claude';
+}
+
+/**
+ * PC에 설치된 Claude Code를 불러서 답을 받아요. (Claude 구독으로 동작)
+ * 대화 규칙은 임시 파일로, 대화 내용은 표준입력으로 넘기고, 도구는 모두 꺼요.
+ */
+function callClaudeCode(settings, messages, opts) {
+  const cp = require('child_process');
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
+
+  const system = messages.filter((m) => m.role === 'system').map((m) => m.content).join('\n\n');
+  const convo = messages.filter((m) => m.role !== 'system');
+  let prompt;
+  if (convo.length === 1 && convo[0].role === 'user') {
+    prompt = convo[0].content;
+  } else {
+    prompt = '지금까지의 대화예요. 마지막 [나]의 말에 이어서, 일기 친구로서 다음에 할 말만 써 주세요. 앞에 이름표는 붙이지 마세요.\n\n' +
+      convo.map((m) => (m.role === 'user' ? '[나] ' : '[일기 친구] ') + m.content).join('\n\n');
+  }
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'steady-diary-'));
+  const systemFile = path.join(dir, 'system.txt');
+  fs.writeFileSync(systemFile, system, 'utf8');
+  const args = ['-p', '--output-format', 'json', '--model', settings.claudeModel || 'sonnet',
+    '--tools', '', '--no-session-persistence', '--system-prompt-file', systemFile];
+  if (opts.schema) args.push('--json-schema', JSON.stringify(opts.schema));
+
+  const cleanup = () => {
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch (e) { /* 임시 폴더라 괜찮아요 */ }
+  };
+
+  return new Promise((resolve, reject) => {
+    let child;
+    try {
+      child = cp.spawn(claudeExecutable(settings), args, { cwd: dir, windowsHide: true });
+    } catch (e) {
+      cleanup();
+      reject(new Error('Claude Code를 찾을 수 없어요. 플러그인 설정에서 Claude Code 경로를 확인해 주세요.'));
+      return;
+    }
+    const out = [];
+    const err = [];
+    child.stdout.on('data', (d) => out.push(d));
+    child.stderr.on('data', (d) => err.push(d));
+    const timer = setTimeout(() => {
+      child.kill();
+      reject(new Error('Claude Code 응답이 너무 오래 걸려요. 다시 시도해 주세요.'));
+    }, 180000);
+    child.on('error', () => {
+      clearTimeout(timer);
+      cleanup();
+      reject(new Error('Claude Code를 찾을 수 없어요. 플러그인 설정에서 Claude Code 경로를 확인해 주세요.'));
+    });
+    child.on('close', () => {
+      clearTimeout(timer);
+      cleanup();
+      const text = Buffer.concat(out).toString('utf8');
+      const errText = Buffer.concat(err).toString('utf8');
+      let data = null;
+      try { data = JSON.parse(text); } catch (e) { /* 아래에서 처리 */ }
+      const all = (text + ' ' + errText).toLowerCase();
+      if (!data || data.is_error) {
+        if (all.includes('login') || all.includes('log in') || all.includes('auth')) {
+          reject(new Error('Claude Code에 로그인이 필요해요. 터미널에서 claude auth login 을 한 번 실행해 주세요.'));
+        } else if (all.includes('limit')) {
+          reject(new Error('Claude 구독 사용량 한도에 도달했어요. 잠시 뒤 다시 시도하거나 설정에서 OpenRouter로 바꿔 주세요.'));
+        } else {
+          reject(new Error('Claude Code 오류예요: ' + ((data && data.result) || errText || text).slice(0, 200)));
+        }
+        return;
+      }
+      if (opts.schema && data.structured_output) {
+        resolve(JSON.stringify(data.structured_output));
+      } else {
+        resolve(String(data.result || ''));
+      }
+    });
+    child.stdin.write(prompt, 'utf8');
+    child.stdin.end();
+  });
+}
+
 async function callAI(settings, messages, options) {
   const opts = options || {};
+  if (usesClaudeCode(settings)) return callClaudeCode(settings, messages, opts);
   if (!settings.apiKey) throw new Error('플러그인 설정에서 OpenRouter API 키를 먼저 넣어 주세요.');
   const body = { model: settings.model, max_tokens: opts.maxTokens || 10000, messages: messages };
   if (opts.schema) {
@@ -436,13 +549,26 @@ class ChatView extends ItemView {
     this.system = systemPrompt(date, context);
   }
 
+  /** 상담사 프로필 사진 (설정에서 고른 보관함 안 이미지). 없으면 null */
+  avatarSrc() {
+    const p = this.plugin.settings.avatarPath;
+    const file = p ? this.app.vault.getAbstractFileByPath(p) : null;
+    return file ? this.app.vault.getResourcePath(file) : null;
+  }
+
   render() {
     this.list.empty();
+    const avatar = this.avatarSrc();
+    const theirRow = () => {
+      const row = this.list.createDiv({ cls: 'sd-row sd-theirs' });
+      if (avatar) row.createEl('img', { cls: 'sd-avatar', attr: { src: avatar, alt: '' } });
+      return row;
+    };
     for (const m of this.messages) {
-      const row = this.list.createDiv({ cls: 'sd-row ' + (m.role === 'user' ? 'sd-mine' : 'sd-theirs') });
+      const row = m.role === 'user' ? this.list.createDiv({ cls: 'sd-row sd-mine' }) : theirRow();
       row.createDiv({ cls: 'sd-bubble', text: m.content });
     }
-    if (this.busy) this.list.createDiv({ cls: 'sd-row sd-theirs' }).createDiv({ cls: 'sd-bubble sd-typing', text: '…' });
+    if (this.busy) theirRow().createDiv({ cls: 'sd-bubble sd-typing', text: '…' });
     const talked = this.messages.some((m) => m.role === 'user');
     this.finishBtn.disabled = !talked || this.busy;
     this.sendBtn.disabled = this.busy;
@@ -588,6 +714,23 @@ class PreviewModal extends Modal {
   onClose() { this.contentEl.empty(); }
 }
 
+/** 보관함 안 이미지 고르기 창 (이름으로 검색) */
+class ImagePicker extends obsidian.FuzzySuggestModal {
+  constructor(app, onPick) {
+    super(app);
+    this.onPick = onPick;
+    this.setPlaceholder('사진 이름으로 찾기');
+  }
+
+  getItems() {
+    return this.app.vault.getFiles().filter((f) => /^(png|jpe?g|gif|webp|bmp|svg|avif)$/i.test(f.extension));
+  }
+
+  getItemText(file) { return file.path; }
+
+  onChooseItem(file) { this.onPick(file); }
+}
+
 /* ---------- 설정 ---------- */
 
 class SettingsTab extends PluginSettingTab {
@@ -600,6 +743,48 @@ class SettingsTab extends PluginSettingTab {
     const el = this.containerEl;
     el.empty();
     el.createEl('h2', { text: 'Steady 일기' });
+
+    new Setting(el)
+      .setName('AI 연결')
+      .setDesc('Claude Code: PC에 설치한 Claude Code로 대화해요(Claude 구독 사용, API 키 필요 없음). 폰에서는 자동으로 OpenRouter를 써요.')
+      .addDropdown((d) => {
+        d.addOption('claude-code', 'Claude Code (Claude 구독, PC)');
+        d.addOption('openrouter', 'OpenRouter (API 키)');
+        d.setValue(this.plugin.settings.provider).onChange(async (v) => {
+          this.plugin.settings.provider = v;
+          await this.plugin.saveSettings();
+        });
+      });
+
+    if (!Platform.isMobile) {
+      new Setting(el)
+        .setName('Claude Code 모델')
+        .addDropdown((d) => {
+          Object.keys(CLAUDE_MODELS).forEach((k) => d.addOption(k, CLAUDE_MODELS[k]));
+          d.setValue(this.plugin.settings.claudeModel).onChange(async (v) => {
+            this.plugin.settings.claudeModel = v;
+            await this.plugin.saveSettings();
+          });
+        });
+
+      new Setting(el)
+        .setName('Claude Code 경로 (보통 비워 두세요)')
+        .setDesc('비워 두면 자동으로 찾아요. 못 찾을 때만 claude.exe 위치를 적어 주세요.')
+        .addText((t) => t.setPlaceholder('자동').setValue(this.plugin.settings.claudePath).onChange(async (v) => {
+          this.plugin.settings.claudePath = v.trim();
+          await this.plugin.saveSettings();
+        }))
+        .addButton((b) => b.setButtonText('연결 확인').onClick(async () => {
+          b.setDisabled(true);
+          try {
+            const r = await callClaudeCode(this.plugin.settings, [{ role: 'user', content: '"연결됐어요"라고만 답해 주세요.' }], {});
+            new Notice('Claude Code 응답: ' + r.trim());
+          } catch (e) {
+            new Notice(e.message);
+          }
+          b.setDisabled(false);
+        }));
+    }
 
     new Setting(el)
       .setName('OpenRouter API 키')
@@ -633,6 +818,27 @@ class SettingsTab extends PluginSettingTab {
     folder('장소 페이지 폴더', 'placeFolder');
     folder('배움 페이지 폴더', 'learningFolder');
 
+    const avatarSetting = new Setting(el)
+      .setName('상담사 프로필 사진')
+      .setDesc('대화창에서 상담사 말풍선 옆에 보일 사진. 사진을 옵시디언 보관함에 넣은 뒤 [고르기]를 눌러요.')
+      .addText((t) => t.setPlaceholder('없음').setValue(this.plugin.settings.avatarPath).setDisabled(true))
+      .addButton((b) => b.setButtonText('고르기').onClick(() => {
+        new ImagePicker(this.app, async (file) => {
+          this.plugin.settings.avatarPath = file.path;
+          await this.plugin.saveSettings();
+          this.plugin.refreshChat();
+          this.display();
+        }).open();
+      }));
+    if (this.plugin.settings.avatarPath) {
+      avatarSetting.addButton((b) => b.setButtonText('지우기').onClick(async () => {
+        this.plugin.settings.avatarPath = '';
+        await this.plugin.saveSettings();
+        this.plugin.refreshChat();
+        this.display();
+      }));
+    }
+
     el.createEl('p', {
       text: '일기 파일 위치는 옵시디언 설정 → 일일 노트의 "새 파일 위치"와 "날짜 형식"을 따라요.',
       cls: 'setting-item-description',
@@ -653,6 +859,13 @@ module.exports = class SteadyDiaryPlugin extends Plugin {
 
   store() {
     return new DiaryStore(this.app, this.settings);
+  }
+
+  /** 열려 있는 대화창을 다시 그려요 (프로필 사진을 바꿨을 때) */
+  refreshChat() {
+    this.app.workspace.getLeavesOfType(VIEW_TYPE).forEach((leaf) => {
+      if (leaf.view && leaf.view.render) leaf.view.render();
+    });
   }
 
   async openChat() {

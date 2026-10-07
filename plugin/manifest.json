@@ -1,7 +1,7 @@
 {
   "id": "steady-diary",
   "name": "Steady 일기",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "minAppVersion": "1.5.0",
   "description": "대화하면서 쓰는 일기. 질문을 따라 이야기하면 정리된 일기와 감정·고민·사람 링크로 저장해요.",
   "author": "Steady",
